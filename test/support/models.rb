@@ -1,27 +1,58 @@
-Association = Struct.new(:klass, :name, :macro, :options)
+Association = Struct.new(:klass, :name, :macro, :scope, :options)
 
-class Column < Struct.new(:name, :type, :limit)
+Column = Struct.new(:name, :type, :limit) do
   # Returns +true+ if the column is either of type integer, float or decimal.
   def number?
     type == :integer || type == :float || type == :decimal
   end
 end
 
-class Company < Struct.new(:id, :name)
+Relation = Struct.new(:records) do
+  delegate :each, to: :records
+
+  def where(conditions = nil)
+    self.class.new conditions ? records.first : records
+  end
+
+  def order(conditions = nil)
+    self.class.new conditions ? records.last : records
+  end
+
+  alias_method :to_a,   :records
+  alias_method :to_ary, :records
+end
+
+Picture = Struct.new(:id, :name) do
   extend ActiveModel::Naming
   include ActiveModel::Conversion
 
-  def self.all(options={})
-    all = (1..3).map{|i| Company.new(i, "Company #{i}")}
-    return [all.first] if options[:conditions].present?
-    return [all.last]  if options[:order].present?
-    return all[0..1] if options[:include].present?
-    return all[1..2] if options[:joins].present?
+  def self.where(conditions = nil)
+    if conditions.is_a?(Hash) && conditions[:name]
+      all.to_a.last
+    else
+      all
+    end
+  end
+
+  def self.all
+    Relation.new((1..3).map { |i| new(i, "#{name} #{i}") })
+  end
+end
+
+Company = Struct.new(:id, :name) do
+  extend ActiveModel::Naming
+  include ActiveModel::Conversion
+
+  class << self
+    delegate :order, :where, to: :_relation
+  end
+
+  def self._relation
     all
   end
 
-  def self.merge_conditions(a, b)
-    (a || {}).merge(b || {})
+  def self.all
+    Relation.new((1..3).map { |i| new(i, "#{name} #{i}") })
   end
 
   def persisted?
@@ -29,14 +60,9 @@ class Company < Struct.new(:id, :name)
   end
 end
 
-class Tag < Company
-  def self.all(options={})
-    (1..3).map{|i| Tag.new(i, "Tag #{i}")}
-  end
-end
+class Tag < Company; end
 
-class TagGroup < Struct.new(:id, :name, :tags)
-end
+TagGroup = Struct.new(:id, :name, :tags)
 
 class User
   extend ActiveModel::Naming
@@ -46,9 +72,22 @@ class User
     :description, :created_at, :updated_at, :credit_limit, :password, :url,
     :delivery_time, :born_at, :special_company_id, :country, :tags, :tag_ids,
     :avatar, :home_picture, :email, :status, :residence_country, :phone_number,
-    :post_count, :lock_version, :amount, :attempts, :action, :credit_card, :gender
+    :post_count, :lock_version, :amount, :attempts, :action, :credit_card, :gender,
+    :extra_special_company_id, :pictures, :picture_ids, :special_pictures,
+    :special_picture_ids
 
-  def initialize(options={})
+  def self.build(extra_attributes = {})
+    attributes = {
+      id: 1,
+      name: 'New in SimpleForm!',
+      description: 'Hello!',
+      created_at: Time.now
+    }.merge! extra_attributes
+
+    new attributes
+  end
+
+  def initialize(options = {})
     @new_record = false
     options.each do |key, value|
       send("#{key}=", value)
@@ -90,7 +129,7 @@ class User
     Column.new(attribute, column_type, limit)
   end
 
-  def self.human_attribute_name(attribute)
+  def self.human_attribute_name(attribute, options = {})
     case attribute
       when 'name'
         'Super User Name!'
@@ -99,33 +138,39 @@ class User
       when 'company'
         'Company Human Name!'
       else
-        attribute.humanize
+        attribute.to_s.humanize
     end
   end
 
   def self.reflect_on_association(association)
     case association
       when :company
-        Association.new(Company, association, :belongs_to, {})
+        Association.new(Company, association, :belongs_to, nil, {})
       when :tags
-        Association.new(Tag, association, :has_many, {})
+        Association.new(Tag, association, :has_many, nil, {})
       when :first_company
-        Association.new(Company, association, :has_one, {})
+        Association.new(Company, association, :has_one, nil, {})
       when :special_company
-        Association.new(Company, association, :belongs_to, { conditions: { id: 1 } })
+        Association.new(Company, association, :belongs_to, nil, { conditions: { id: 1 } })
+      when :extra_special_company
+        Association.new(Company, association, :belongs_to, nil, { conditions: proc { { id: self.id } } })
+      when :pictures
+        Association.new(Picture, association, :has_many, nil, {})
+      when :special_pictures
+        Association.new(Picture, association, :has_many, proc { where(name: self.name) }, {})
     end
   end
 
   def errors
     @errors ||= begin
-      hash = Hash.new { |h,k| h[k] = [] }
-      hash.merge!(
-        name: ["can't be blank"],
-        description: ["must be longer than 15 characters"],
-        age: ["is not a number", "must be greater than 18"],
-        company: ["company must be present"],
-        company_id: ["must be valid"]
-      )
+      errors = ActiveModel::Errors.new(self)
+      errors.add(:name, "can't be blank")
+      errors.add(:description, 'must be longer than 15 characters')
+      errors.add(:age, 'is not a number')
+      errors.add(:age, 'must be greater than 18')
+      errors.add(:company, 'company must be present')
+      errors.add(:company_id, 'must be valid')
+      errors
     end
   end
 
@@ -187,11 +232,11 @@ class OtherValidatingUser < User
     only_integer: true
   validates_numericality_of :amount,
     greater_than: Proc.new { |user| user.age },
-    less_than: Proc.new { |user| user.age + 100},
+    less_than: Proc.new { |user| user.age + 100 },
     only_integer: true
   validates_numericality_of :attempts,
     greater_than_or_equal_to: Proc.new { |user| user.age },
-    less_than_or_equal_to: Proc.new { |user| user.age + 100},
+    less_than_or_equal_to: Proc.new { |user| user.age + 100 },
     only_integer: true
 
   validates_format_of :country, with: /\w+/
@@ -208,4 +253,7 @@ class HashBackedAuthor < Hash
   def name
     'hash backed author'
   end
+end
+
+class UserNumber1And2 < User
 end

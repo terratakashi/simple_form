@@ -46,12 +46,12 @@ module MiscHelpers
     end
   end
 
-  def swap_wrapper(name=:default, wrapper=self.custom_wrapper)
-    old = SimpleForm.wrappers[name]
-    SimpleForm.wrappers[name] = wrapper
+  def swap_wrapper(name = :default, wrapper = self.custom_wrapper)
+    old = SimpleForm.wrappers[name.to_s]
+    SimpleForm.wrappers[name.to_s] = wrapper
     yield
   ensure
-    SimpleForm.wrappers[name] = old
+    SimpleForm.wrappers[name.to_s] = old
   end
 
   def custom_wrapper
@@ -65,6 +65,32 @@ module MiscHelpers
         be.use :error, wrap_with: { tag: :span, class: "omg_error" }
       end
       b.use :hint, wrap_with: { class: "omg_hint" }
+    end
+  end
+
+  def custom_wrapper_with_input_class
+    SimpleForm.build tag: :div, class: "custom_wrapper" do |b|
+      b.use :label
+      b.use :input, class: 'inline-class'
+    end
+  end
+
+  def custom_wrapper_with_label_class
+    SimpleForm.build tag: :div, class: "custom_wrapper" do |b|
+      b.use :label, class: 'inline-class'
+      b.use :input
+    end
+  end
+
+  def custom_wrapper_with_input_attributes
+    SimpleForm.build tag: :div, class: "custom_wrapper" do |b|
+      b.use :input, data: { modal: true }
+    end
+  end
+
+  def custom_wrapper_with_label_input_class
+    SimpleForm.build tag: :div, class: "custom_wrapper" do |b|
+      b.use :label_input, class: 'inline-class'
     end
   end
 
@@ -112,12 +138,30 @@ module MiscHelpers
     end
   end
 
+  def custom_wrapper_with_additional_attributes
+    SimpleForm.build tag: :div, class: 'custom_wrapper', html: { data: { wrapper: :test }, title: 'some title' } do |b|
+      b.use :label_input
+    end
+  end
+
+  def custom_wrapper_with_full_error
+    SimpleForm.build tag: :div, class: 'custom_wrapper' do |b|
+      b.use :full_error,  wrap_with: { tag: :span, class: :error }
+    end
+  end
+
+  def custom_wrapper_with_label_text
+    SimpleForm.build :label_text => proc { |label, required| "**#{label}**" } do |b|
+      b.use :label_input
+    end
+  end
+
   def custom_form_for(object, *args, &block)
-    simple_form_for(object, *(args << { builder: CustomFormBuilder }), &block)
+    simple_form_for(object, *args, { builder: CustomFormBuilder }, &block)
   end
 
   def custom_mapping_form_for(object, *args, &block)
-    simple_form_for(object, *(args << { builder: CustomMapTypeFormBuilder }), &block)
+    simple_form_for(object, *args, { builder: CustomMapTypeFormBuilder }, &block)
   end
 
   def with_concat_form_for(*args, &block)
@@ -142,7 +186,7 @@ module MiscHelpers
     end
   end
 
-  def with_input_for(object, attribute_name, type, options={})
+  def with_input_for(object, attribute_name, type, options = {})
     with_concat_form_for(object) do |f|
       f.input(attribute_name, options.merge(as: type))
     end
@@ -151,7 +195,7 @@ end
 
 class CustomFormBuilder < SimpleForm::FormBuilder
   def input(attribute_name, *args, &block)
-    super(attribute_name, *(args << { input_html: { class: 'custom' } }), &block)
+    super(attribute_name, *args, { input_html: { class: 'custom' } }, &block)
   end
 end
 

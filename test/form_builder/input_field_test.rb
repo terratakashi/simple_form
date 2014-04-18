@@ -21,6 +21,23 @@ class InputFieldTest < ActionView::TestCase
     assert_select 'textarea#user_name.text'
   end
 
+  test 'builder input_field should generate input type based on column type' do
+    with_concat_form_for(@user) do |f|
+      f.input_field :age
+    end
+
+    assert_select 'input[type=number].integer#user_age'
+  end
+
+  test 'builder input_field should be able to disable any component' do
+    with_concat_form_for(@user) do |f|
+      f.input_field :age, html5: false
+    end
+
+    assert_no_select 'input[html5=false]#user_age'
+    assert_select 'input[type=text].integer#user_age'
+  end
+
   test 'builder input_field should allow passing options to input tag' do
     with_concat_form_for(@user) do |f|
       f.input_field :name, id: 'name_input', class: 'name'
@@ -71,12 +88,28 @@ class InputFieldTest < ActionView::TestCase
     assert_select 'input[min=18]'
   end
 
-  test 'builder input_field should use pattern component' do
+  test 'builder input_field should not use pattern component by default' do
     with_concat_form_for(@other_validating_user) do |f|
       f.input_field :country, as: :string
     end
 
+    assert_no_select 'input[pattern="\w+"]'
+  end
+
+  test 'builder input_field should infer pattern from attributes' do
+    with_concat_form_for(@other_validating_user) do |f|
+      f.input_field :country, as: :string, pattern: true
+    end
+
     assert_select 'input[pattern="\w+"]'
+  end
+
+  test 'builder input_field should accept custom patter' do
+    with_concat_form_for(@other_validating_user) do |f|
+      f.input_field :country, as: :string, pattern: '\d+'
+    end
+
+    assert_select 'input[pattern="\d+"]'
   end
 
   test 'builder input_field should use readonly component' do
@@ -104,5 +137,13 @@ class InputFieldTest < ActionView::TestCase
     assert_no_select 'select.status[collection]'
     assert_no_select 'select.status[label_method]'
     assert_no_select 'select.status[value_method]'
+  end
+
+  test 'build input_field does not treat "boolean_style" as an HTML attribute' do
+    with_concat_form_for(@user) do |f|
+      f.input_field :active, boolean_style: :nested
+    end
+
+    assert_no_select 'input.boolean[boolean_style]'
   end
 end

@@ -2,11 +2,16 @@ module SimpleForm
   module Components
     # Needs to be enabled in order to do automatic lookups.
     module Hints
-      def hint
+      def hint(wrapper_options = nil)
         @hint ||= begin
           hint = options[:hint]
-          hint_content = hint.is_a?(String) ? hint : translate(:hints)
-          hint_content.html_safe if hint_content
+
+          if hint.is_a?(String)
+            html_escape(hint)
+          else
+            content = translate_from_namespace(:hints)
+            content.html_safe if content
+          end
         end
       end
 

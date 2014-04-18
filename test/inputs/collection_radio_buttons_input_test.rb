@@ -18,6 +18,22 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
     assert_select 'label[for=user_active_false]', 'No'
   end
 
+  test 'input as radio should generate internal labels with accurate `for` values with nested boolean style' do
+    swap SimpleForm, boolean_style: :nested do
+      with_input_for @user, :active, :radio_buttons
+      assert_select 'label[for=user_active_true]', 'Yes'
+      assert_select 'label[for=user_active_false]', 'No'
+    end
+  end
+
+  test 'nested label should not duplicate input id' do
+    swap SimpleForm, boolean_style: :nested do
+      with_input_for @user, :active, :radio_buttons, id: 'nested_id'
+      assert_select 'input#user_active_true'
+      assert_no_select 'label#user_active_true'
+    end
+  end
+
   test 'input as radio should use i18n to translate internal labels' do
     store_translations(:en, simple_form: { yes: 'Sim', no: 'Não' }) do
       with_input_for @user, :active, :radio_buttons
@@ -48,8 +64,8 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
     with_input_for @user, :name, :radio_buttons, collection: ['Jose', 'Carlos']
     assert_select 'input[type=radio][value=Jose]'
     assert_select 'input[type=radio][value=Carlos]'
-    assert_select 'label.collection_radio_buttons', 'Jose'
-    assert_select 'label.collection_radio_buttons', 'Carlos'
+    assert_select 'label.collection_radio_buttons[for=user_name_jose]', 'Jose'
+    assert_select 'label.collection_radio_buttons[for=user_name_carlos]', 'Carlos'
   end
 
   test 'input should do automatic collection translation for radio types using defaults key' do
@@ -59,8 +75,8 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
       with_input_for @user, :gender, :radio_buttons, collection: [:male, :female]
       assert_select 'input[type=radio][value=male]'
       assert_select 'input[type=radio][value=female]'
-      assert_select 'label.collection_radio_buttons', 'Male'
-      assert_select 'label.collection_radio_buttons', 'Female'
+      assert_select 'label.collection_radio_buttons[for=user_gender_male]', 'Male'
+      assert_select 'label.collection_radio_buttons[for=user_gender_female]', 'Female'
     end
   end
 
@@ -71,8 +87,36 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
       with_input_for @user, :gender, :radio_buttons, collection: [:male, :female]
       assert_select 'input[type=radio][value=male]'
       assert_select 'input[type=radio][value=female]'
-      assert_select 'label.collection_radio_buttons', 'Male'
-      assert_select 'label.collection_radio_buttons', 'Female'
+      assert_select 'label.collection_radio_buttons[for=user_gender_male]', 'Male'
+      assert_select 'label.collection_radio_buttons[for=user_gender_female]', 'Female'
+    end
+  end
+
+  test 'input should do automatic collection translation and preserve html markup' do
+    swap SimpleForm, boolean_style: :nested do
+      store_translations(:en, simple_form: { options: { user: {
+        gender: { male_html: '<strong>Male</strong>', female_html: '<strong>Female</strong>' }
+      } } } ) do
+        with_input_for @user, :gender, :radio_buttons, collection: [:male, :female]
+        assert_select 'input[type=radio][value=male]'
+        assert_select 'input[type=radio][value=female]'
+        assert_select 'label[for=user_gender_male]', 'Male'
+        assert_select 'label[for=user_gender_female]', 'Female'
+      end
+    end
+  end
+
+  test 'input should do automatic collection translation with keys prefixed with _html and a string value' do
+    swap SimpleForm, boolean_style: :nested do
+      store_translations(:en, simple_form: { options: { user: {
+        gender: { male_html: 'Male', female_html: 'Female' }
+      } } } ) do
+        with_input_for @user, :gender, :radio_buttons, collection: [:male, :female]
+        assert_select 'input[type=radio][value=male]'
+        assert_select 'input[type=radio][value=female]'
+        assert_select 'label[for=user_gender_male]', 'Male'
+        assert_select 'label[for=user_gender_female]', 'Female'
+      end
     end
   end
 
@@ -80,6 +124,11 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
     @user.name = "Carlos"
     with_input_for @user, :name, :radio_buttons, collection: ['Jose', 'Carlos']
     assert_select 'input[type=radio][value=Carlos][checked=checked]'
+  end
+
+  test 'input should accept html options as the last element of collection' do
+    with_input_for @user, :name, :radio_buttons, collection: [['Jose', 'jose', class: 'foo']]
+    assert_select 'input.foo[type=radio][value=jose]'
   end
 
   test 'input should allow using a collection with text/value arrays' do
@@ -98,7 +147,7 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
 
   test 'input should allow overriding only label method for collections' do
     with_input_for @user, :name, :radio_buttons,
-                          collection: ['Jose' , 'Carlos'],
+                          collection: ['Jose', 'Carlos'],
                           label_method: :upcase
     assert_select 'label.collection_radio_buttons', 'JOSE'
     assert_select 'label.collection_radio_buttons', 'CARLOS'
@@ -106,7 +155,7 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
 
   test 'input should allow overriding only value method for collections' do
     with_input_for @user, :name, :radio_buttons,
-                          collection: ['Jose' , 'Carlos'],
+                          collection: ['Jose', 'Carlos'],
                           value_method: :upcase
     assert_select 'input[type=radio][value=JOSE]'
     assert_select 'input[type=radio][value=CARLOS]'
@@ -114,7 +163,7 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
 
   test 'input should allow overriding label and value method for collections' do
     with_input_for @user, :name, :radio_buttons,
-                          collection: ['Jose' , 'Carlos'],
+                          collection: ['Jose', 'Carlos'],
                           label_method: :upcase,
                           value_method: :downcase
     assert_select 'input[type=radio][value=jose]'
@@ -125,7 +174,7 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
 
   test 'input should allow overriding label and value method using a lambda for collections' do
     with_input_for @user, :name, :radio_buttons,
-                          collection: ['Jose' , 'Carlos'],
+                          collection: ['Jose', 'Carlos'],
                           label_method: lambda { |i| i.upcase },
                           value_method: lambda { |i| i.downcase }
     assert_select 'input[type=radio][value=jose]'
@@ -135,9 +184,15 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
   end
 
   test 'collection input with radio type should generate required html attribute' do
-    with_input_for @user, :name, :radio_buttons, collection: ['Jose' , 'Carlos']
+    with_input_for @user, :name, :radio_buttons, collection: ['Jose', 'Carlos']
     assert_select 'input[type=radio].required'
     assert_select 'input[type=radio][required]'
+  end
+
+  test 'collection input with radio type should generate aria-required html attribute' do
+    with_input_for @user, :name, :radio_buttons, collection: ['Jose', 'Carlos']
+    assert_select 'input[type=radio].required'
+    assert_select 'input[type=radio][aria-required=true]'
   end
 
   test 'input radio does not wrap the collection by default' do
@@ -281,29 +336,27 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
     swap SimpleForm, boolean_style: :nested do
       with_input_for @user, :active, :radio_buttons
 
-      assert_select 'label.radio > input#user_active_true[type=radio]'
-      assert_select 'label.radio', 'Yes'
-      assert_select 'label.radio > input#user_active_false[type=radio]'
-      assert_select 'label.radio', 'No'
+      assert_select 'span.radio > label > input#user_active_true[type=radio]'
+      assert_select 'span.radio > label', 'Yes'
+      assert_select 'span.radio > label > input#user_active_false[type=radio]'
+      assert_select 'span.radio > label', 'No'
       assert_no_select 'label.collection_radio_buttons'
     end
   end
 
-  test 'input radio with nested style overrides configured item wrapper tag, forcing the :label' do
+  test 'input radio with nested style does not overrides configured item wrapper tag' do
     swap SimpleForm, boolean_style: :nested, item_wrapper_tag: :li do
       with_input_for @user, :active, :radio_buttons
 
-      assert_select 'label.radio > input'
-      assert_no_select 'li'
+      assert_select 'li.radio > label > input'
     end
   end
 
-  test 'input radio with nested style overrides given item wrapper tag, forcing the :label' do
+  test 'input radio with nested style does not overrides given item wrapper tag' do
     swap SimpleForm, boolean_style: :nested do
       with_input_for @user, :active, :radio_buttons, item_wrapper_tag: :li
 
-      assert_select 'label.radio > input'
-      assert_no_select 'li'
+      assert_select 'li.radio > label > input'
     end
   end
 
@@ -311,7 +364,24 @@ class CollectionRadioButtonsInputTest < ActionView::TestCase
     swap SimpleForm, boolean_style: :nested do
       with_input_for @user, :active, :radio_buttons, item_wrapper_class: "inline"
 
-      assert_select 'label.radio.inline > input'
+      assert_select 'span.radio.inline > label > input'
+    end
+  end
+
+  test 'input radio wrapper class are not included when set to falsey' do
+    swap SimpleForm, include_default_input_wrapper_class: false, boolean_style: :nested do
+      with_input_for @user, :gender, :radio_buttons, collection: [:male, :female]
+
+      assert_no_select 'label.radio'
+    end
+  end
+
+  test 'input check boxes custom wrapper class is included when include input wrapper class is falsey' do
+    swap SimpleForm, include_default_input_wrapper_class: false, boolean_style: :nested do
+      with_input_for @user, :gender, :radio_buttons, collection: [:male, :female], item_wrapper_class: 'custom'
+
+      assert_no_select 'label.radio'
+      assert_select 'span.custom'
     end
   end
 end

@@ -1,19 +1,21 @@
 module SimpleForm
   module Inputs
     class CollectionRadioButtonsInput < CollectionInput
-      def input
+      def input(wrapper_options = nil)
         label_method, value_method = detect_collection_methods
+
+        merged_input_options = merge_wrapper_options(input_html_options, wrapper_options)
 
         @builder.send("collection_#{input_type}",
           attribute_name, collection, value_method, label_method,
-          input_options, input_html_options, &collection_block_for_nested_boolean_style
+          input_options, merged_input_options,
+          &collection_block_for_nested_boolean_style
         )
       end
 
       def input_options
         options = super
         apply_default_collection_options!(options)
-        apply_nested_boolean_collection_options!(options) if nested_boolean_style?
         options
       end
 
@@ -23,19 +25,12 @@ module SimpleForm
         options[:item_wrapper_tag] ||= options.fetch(:item_wrapper_tag, SimpleForm.item_wrapper_tag)
         options[:item_wrapper_class] = [
           item_wrapper_class, options[:item_wrapper_class], SimpleForm.item_wrapper_class
-        ].compact.presence
+        ].compact.presence if SimpleForm.include_default_input_wrapper_class
 
         options[:collection_wrapper_tag] ||= options.fetch(:collection_wrapper_tag, SimpleForm.collection_wrapper_tag)
         options[:collection_wrapper_class] = [
           options[:collection_wrapper_class], SimpleForm.collection_wrapper_class
         ].compact.presence
-      end
-
-      # Force item wrapper to be a label when using nested boolean, to support
-      # configuring classes through :item_wrapper_class, and to maintain
-      # compatibility with :inline style and default :item_wrapper_tag.
-      def apply_nested_boolean_collection_options!(options)
-        options[:item_wrapper_tag] = :label
       end
 
       def collection_block_for_nested_boolean_style

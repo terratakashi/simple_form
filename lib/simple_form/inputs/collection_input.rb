@@ -12,14 +12,20 @@ module SimpleForm
         end
       end
 
-      def input
+      def input(wrapper_options = nil)
         raise NotImplementedError,
           "input should be implemented by classes inheriting from CollectionInput"
       end
 
       def input_options
         options = super
+
         options[:include_blank] = true unless skip_include_blank?
+
+        [:prompt, :include_blank].each do |key|
+          translate_option options, key
+        end
+
         options
       end
 
@@ -33,7 +39,7 @@ module SimpleForm
       end
 
       def has_required?
-        super && (input_options[:include_blank] || multiple?)
+        super && (input_options[:include_blank] || input_options[:prompt] || multiple?)
       end
 
       # Check if :include_blank must be included by default.
@@ -66,15 +72,19 @@ module SimpleForm
         collection_translated = translate_collection if collection_classes == [Symbol]
 
         if collection_translated || collection_classes.include?(Array)
-          { label: :first, value: :last }
+          { label: :first, value: :second }
         elsif collection_includes_basic_objects?(collection_classes)
           { label: :to_s, value: :to_s }
         else
-          sample = collection.first || collection.last
-
-          { label: SimpleForm.collection_label_methods.find { |m| sample.respond_to?(m) },
-            value: SimpleForm.collection_value_methods.find { |m| sample.respond_to?(m) } }
+          detect_method_from_class(collection_classes)
         end
+      end
+
+      def detect_method_from_class(collection_classes)
+        sample = collection.first || collection.last
+
+        { label: SimpleForm.collection_label_methods.find { |m| sample.respond_to?(m) },
+          value: SimpleForm.collection_value_methods.find { |m| sample.respond_to?(m) } }
       end
 
       def detect_collection_classes(some_collection = collection)
@@ -88,14 +98,27 @@ module SimpleForm
       end
 
       def translate_collection
-        if translated_collection = translate(:options)
+        if translated_collection = translate_from_namespace(:options)
           @collection = collection.map do |key|
-            [translated_collection[key] || key, key]
+            html_key = "#{key}_html".to_sym
+
+            if translated_collection[html_key]
+              [translated_collection[html_key].html_safe || key, key.to_s]
+            else
+              [translated_collection[key] || key, key.to_s]
+            end
           end
           true
+        end
+      end
+
+      def translate_option(options, key)
+        if options[key] == :translate
+          namespace = key.to_s.pluralize
+
+          options[key] = translate_from_namespace(namespace, true)
         end
       end
     end
   end
 end
-

@@ -1,4 +1,3 @@
-require 'rubygems'
 require 'bundler/setup'
 
 require 'minitest/autorun'
@@ -6,6 +5,8 @@ require 'minitest/autorun'
 require 'active_model'
 require 'action_controller'
 require 'action_view'
+ActionView::RoutingUrlFor.send(:include, ActionDispatch::Routing::UrlFor)
+
 require 'action_view/template'
 
 require 'action_view/test_case'
@@ -36,40 +37,27 @@ class ActionView::TestCase
   include SimpleForm::ActionViewExtensions::FormHelper
 
   setup :set_controller
-  setup :setup_new_user
+  setup :setup_users
 
   def set_controller
     @controller = MockController.new
   end
 
-  def setup_new_user(options={})
-    @user = User.new({
-      id: 1,
-      name: 'New in SimpleForm!',
-      description: 'Hello!',
-      created_at: Time.now
-    }.merge(options))
+  def setup_users(extra_attributes = {})
+    @user = User.build(extra_attributes)
 
-    @validating_user = ValidatingUser.new({
-      id: 1,
-      name: 'New in SimpleForm!',
-      description: 'Hello!',
+    @validating_user = ValidatingUser.build({
       home_picture: 'Home picture',
-      created_at: Time.now,
       age: 19,
       amount: 15,
       attempts: 1,
       company: [1]
-    }.merge(options))
+    }.merge!(extra_attributes))
 
-    @other_validating_user = OtherValidatingUser.new({
-      id: 1,
-      name: 'New in SimpleForm!',
-      description: 'Hello!',
-      created_at: Time.now,
+    @other_validating_user = OtherValidatingUser.build({
       age: 19,
       company: 1
-    }.merge(options))
+    }.merge!(extra_attributes))
   end
 
   def protect_against_forgery?

@@ -18,9 +18,15 @@ class CollectionCheckBoxesInputTest < ActionView::TestCase
   end
 
   test 'collection input with check_boxes type should not generate required html attribute' do
-    with_input_for @user, :name, :check_boxes, collection: ['Jose' , 'Carlos']
+    with_input_for @user, :name, :check_boxes, collection: ['Jose', 'Carlos']
     assert_select 'input.required'
     assert_no_select 'input[required]'
+  end
+
+  test 'collection input with check_boxes type should not generate aria-required html attribute' do
+    with_input_for @user, :name, :check_boxes, collection: ['Jose', 'Carlos']
+    assert_select 'input.required'
+    assert_no_select 'input[aria-required]'
   end
 
   test 'input should do automatic collection translation for check_box types using defaults key' do
@@ -47,11 +53,30 @@ class CollectionCheckBoxesInputTest < ActionView::TestCase
     end
   end
 
+  test 'input that uses automatic collection translation for check_boxes should properly set checked values' do
+    store_translations(:en, simple_form: { options: { defaults: {
+      gender: { male: 'Male', female: 'Female'}
+    } } } ) do
+      @user.gender = 'male'
+
+      with_input_for @user, :gender, :check_boxes, collection: [:male, :female]
+      assert_select 'input[type=checkbox][value=male][checked=checked]'
+      assert_select 'input[type=checkbox][value=female]'
+      assert_select 'label.collection_check_boxes', 'Male'
+      assert_select 'label.collection_check_boxes', 'Female'
+    end
+  end
+
   test 'input check boxes does not wrap the collection by default' do
     with_input_for @user, :active, :check_boxes
 
     assert_select 'form input[type=checkbox]', count: 2
     assert_no_select 'form ul'
+  end
+
+  test 'input check boxes accepts html options as the last element of collection' do
+    with_input_for @user, :name, :check_boxes, collection: [['Jose', 'jose', class: 'foo']]
+    assert_select 'input.foo[type=checkbox][value=jose]'
   end
 
   test 'input check boxes wraps the collection in the configured collection wrapper tag' do
@@ -188,29 +213,27 @@ class CollectionCheckBoxesInputTest < ActionView::TestCase
     swap SimpleForm, boolean_style: :nested do
       with_input_for @user, :active, :check_boxes
 
-      assert_select 'label.checkbox > input#user_active_true[type=checkbox]'
-      assert_select 'label.checkbox', 'Yes'
-      assert_select 'label.checkbox > input#user_active_false[type=checkbox]'
-      assert_select 'label.checkbox', 'No'
+      assert_select 'span.checkbox > label > input#user_active_true[type=checkbox]'
+      assert_select 'span.checkbox > label', 'Yes'
+      assert_select 'span.checkbox > label > input#user_active_false[type=checkbox]'
+      assert_select 'span.checkbox > label', 'No'
       assert_no_select 'label.collection_radio_buttons'
     end
   end
 
-  test 'input check boxes with nested style overrides configured item wrapper tag, forcing the :label' do
+  test 'input check boxes with nested style does not overrides configured item wrapper tag' do
     swap SimpleForm, boolean_style: :nested, item_wrapper_tag: :li do
       with_input_for @user, :active, :check_boxes
 
-      assert_select 'label.checkbox > input'
-      assert_no_select 'li'
+      assert_select 'li.checkbox > label > input'
     end
   end
 
-  test 'input check boxes with nested style overrides given item wrapper tag, forcing the :label' do
+  test 'input check boxes with nested style does not overrides given item wrapper tag' do
     swap SimpleForm, boolean_style: :nested do
       with_input_for @user, :active, :check_boxes, item_wrapper_tag: :li
 
-      assert_select 'label.checkbox > input'
-      assert_no_select 'li'
+      assert_select 'li.checkbox > label > input'
     end
   end
 
@@ -218,7 +241,24 @@ class CollectionCheckBoxesInputTest < ActionView::TestCase
     swap SimpleForm, boolean_style: :nested do
       with_input_for @user, :active, :check_boxes, item_wrapper_class: "inline"
 
-      assert_select 'label.checkbox.inline > input'
+      assert_select 'span.checkbox.inline > label > input'
+    end
+  end
+
+  test 'input check boxes wrapper class are not included when set to falsey' do
+    swap SimpleForm, include_default_input_wrapper_class: false, boolean_style: :nested do
+      with_input_for @user, :gender, :check_boxes, collection: [:male, :female]
+
+      assert_no_select 'label.checkbox'
+    end
+  end
+
+  test 'input check boxes custom wrapper class is included when include input wrapper class is falsey' do
+    swap SimpleForm, include_default_input_wrapper_class: false, boolean_style: :nested do
+      with_input_for @user, :gender, :check_boxes, collection: [:male, :female], item_wrapper_class: 'custom'
+
+      assert_no_select 'label.checkbox'
+      assert_select 'span.custom'
     end
   end
 end

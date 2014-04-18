@@ -21,16 +21,19 @@ module SimpleForm
         end
       end
 
-      def label
+      def label(wrapper_options = nil)
+        label_options = merge_wrapper_options(label_html_options, wrapper_options)
+
         if generate_label_for_attribute?
-          @builder.label(label_target, label_text, label_html_options)
+          @builder.label(label_target, label_text, label_options)
         else
-          template.label_tag(nil, label_text, label_html_options)
+          template.label_tag(nil, label_text, label_options)
         end
       end
 
       def label_text
-        SimpleForm.label_text.call(raw_label_text, required_label_text).strip.html_safe
+        label_text = options[:label_text] || SimpleForm.label_text
+        label_text.call(html_escape(raw_label_text), required_label_text, options[:label].present?).strip.html_safe
       end
 
       def label_target
@@ -46,6 +49,7 @@ module SimpleForm
         if options.key?(:input_html) && options[:input_html].key?(:id)
           label_options[:for] = options[:input_html][:id]
         end
+
         label_options
       end
 
@@ -62,7 +66,7 @@ module SimpleForm
 
       # First check labels translation and then human attribute name.
       def label_translation #:nodoc:
-        if SimpleForm.translate_labels && (translated_label = translate(:labels))
+        if SimpleForm.translate_labels && (translated_label = translate_from_namespace(:labels))
           translated_label
         elsif object.class.respond_to?(:human_attribute_name)
           object.class.human_attribute_name(reflection_or_attribute_name.to_s)

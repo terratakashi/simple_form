@@ -50,14 +50,42 @@ class BooleanInputTest < ActionView::TestCase
   test 'input boolean with nested allows :inline_label' do
     swap SimpleForm, boolean_style: :nested do
       with_input_for @user, :active, :boolean, label: false, inline_label: 'I am so inline.'
-      assert_select 'label.checkbox', text: 'I am so inline.'
+      assert_select 'label.checkbox', text: ' I am so inline.'
+    end
+  end
+
+  test 'input boolean with nested escapes :inline_label with HTML' do
+    swap SimpleForm, boolean_style: :nested do
+      with_input_for @user, :active, :boolean, label: false, inline_label: '<b>I am so inline.</b>'
+      assert_select 'label.checkbox', text: ' &lt;b&gt;I am so inline.&lt;/b&gt;'
+    end
+  end
+
+  test 'input boolean with nested allows :inline_label with HTML when safe' do
+    swap SimpleForm, boolean_style: :nested do
+      with_input_for @user, :active, :boolean, label: false, inline_label: '<b>I am so inline.</b>'.html_safe
+      assert_select 'label.checkbox b', text: 'I am so inline.'
     end
   end
 
   test 'input boolean with nested style creates an inline label using the default label text when inline_label option set to true' do
     swap SimpleForm, boolean_style: :nested do
       with_input_for @user, :active, :boolean, label: false, inline_label: true
-      assert_select 'label.checkbox', text: 'Active'
+      assert_select 'label.checkbox', text: ' Active'
+    end
+  end
+
+  test 'input boolean with nested style creates an inline label using the label text when inline_label option set to true' do
+    swap SimpleForm, boolean_style: :nested do
+      with_input_for @user, :active, :boolean, label: false, inline_label: true, label_text: proc { 'New Active' }
+      assert_select 'label.checkbox', text: ' New Active'
+    end
+  end
+
+  test 'input boolean with nested style creates an inline label using the label html when inline_label option set to true' do
+    swap SimpleForm, boolean_style: :nested do
+      with_input_for @user, :active, :boolean, label: false, inline_label: true, label_text: proc { '<b>New Active</b>' }
+      assert_select 'label.checkbox', text: ' New Active'
     end
   end
 
@@ -128,12 +156,44 @@ class BooleanInputTest < ActionView::TestCase
     end
   end
 
+  test 'input boolean with nested style works using :input only in wrapper config (no label_input), adding the extra label wrapper with custom class' do
+    swap_wrapper do
+      swap SimpleForm, boolean_style: :nested, boolean_label_class: 'foo' do
+        with_input_for @user, :active, :boolean
+
+        assert_select 'label.boolean + input[type=hidden] + label.foo > input.boolean'
+      end
+    end
+  end
+
   test 'input boolean with nested style works using :label_input in wrapper config, adding "checkbox" class to label' do
     swap_wrapper :default, self.custom_wrapper_without_top_level do
       swap SimpleForm, boolean_style: :nested do
         with_input_for @user, :active, :boolean
 
         assert_select 'input[type=hidden] + label.boolean.checkbox > input.boolean'
+      end
+    end
+  end
+
+  test 'input boolean with nested style works using :label_input in wrapper config, adding custom class to label' do
+    swap_wrapper :default, self.custom_wrapper_without_top_level do
+      swap SimpleForm, boolean_style: :nested, boolean_label_class: 'foo' do
+        with_input_for @user, :active, :boolean
+
+        assert_select 'input[type=hidden] + label.boolean.foo > input.boolean'
+      end
+    end
+  end
+
+  test 'input boolean without additional classes should add "checkbox" class to label' do
+    swap_wrapper :default, self.custom_wrapper_without_top_level do
+      swap SimpleForm, boolean_style: :nested, generate_additional_classes_for: [:input] do
+        with_input_for @user, :active, :boolean
+
+        assert_select 'label'
+        assert_select 'label.checkbox'
+        assert_no_select 'label.boolean'
       end
     end
   end

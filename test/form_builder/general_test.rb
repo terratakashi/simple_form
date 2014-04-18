@@ -22,6 +22,14 @@ class FormBuilderTest < ActionView::TestCase
     end
   end
 
+  test 'builder should work without controller' do
+    stub_any_instance ActionView::TestCase, :controller, nil do
+      simple_form_for @user do |f|
+        assert f.input(:name)
+      end
+    end
+  end
+
   test 'builder input should allow a block to configure input' do
     with_form_for @user, :name do
       text_field_tag :foo, :bar, id: :cool
@@ -77,6 +85,19 @@ class FormBuilderTest < ActionView::TestCase
       assert_no_select 'form input#user_post_count.hidden'
       assert_select 'form input#user_post_count.string'
     end
+  end
+
+  test 'builder allow to use numbers in the model name' do
+    user = UserNumber1And2.build(tags: [Tag.new(nil, 'Tag1')])
+
+    with_concat_form_for(user, url: '/') do |f|
+      f.simple_fields_for(:tags) do |tags|
+        tags.input :name
+      end
+    end
+
+    assert_select 'form .user_number1_and2_tags_name'
+    assert_no_select 'form .user_number1_and2_tags_1_name'
   end
 
   # INPUT TYPES

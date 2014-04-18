@@ -8,9 +8,11 @@ module SimpleForm
 
     # When action is create or update, we still should use new and edit
     ACTIONS = {
-      create: :new,
-      update: :edit
+      'create' => 'new',
+      'update' => 'edit'
     }
+
+    ATTRIBUTE_COMPONENTS = [:html5, :min_max, :maxlength, :placeholder, :pattern, :readonly]
 
     extend MapType
     include SimpleForm::Inputs
@@ -104,18 +106,13 @@ module SimpleForm
     # Some inputs, as :time_zone and :country accepts a :priority option. If none is
     # given SimpleForm.time_zone_priority and SimpleForm.country_priority are used respectively.
     #
-    def input(attribute_name, options={}, &block)
+    def input(attribute_name, options = {}, &block)
       options = @defaults.deep_dup.deep_merge(options) if @defaults
-      input = find_input(attribute_name, options, &block)
 
-      chosen =
-        if name = options[:wrapper] || find_wrapper_mapping(input.input_type)
-          name.respond_to?(:render) ? name : SimpleForm.wrapper(name)
-        else
-          wrapper
-        end
+      input   = find_input(attribute_name, options, &block)
+      wrapper = find_wrapper(input.input_type, options)
 
-      chosen.render input
+      wrapper.render input
     end
     alias :attribute :input
 
@@ -133,12 +130,17 @@ module SimpleForm
     #     <input class="string required" id="user_name" maxlength="100"
     #        name="user[name]" type="text" value="Carlos" />
     #
-    def input_field(attribute_name, options={})
+    def input_field(attribute_name, options = {})
       options = options.dup
-      options[:input_html] = options.except(:as, :collection, :label_method, :value_method)
+      options[:input_html] = options.except(:as, :boolean_style, :collection, :label_method, :value_method, *ATTRIBUTE_COMPONENTS)
       options = @defaults.deep_dup.deep_merge(options) if @defaults
 
-      SimpleForm::Wrappers::Root.new([:min_max, :maxlength, :placeholder, :pattern, :readonly, :input], wrapper: false).render find_input(attribute_name, options)
+      input      = find_input(attribute_name, options)
+      wrapper    = find_wrapper(input.input_type, options)
+      components = (wrapper.components.map(&:namespace) & ATTRIBUTE_COMPONENTS) + [:input]
+      components = components.map { |component| SimpleForm::Wrappers::Leaf.new(component) }
+
+      SimpleForm::Wrappers::Root.new(components, wrapper.options.merge(wrapper: false)).render input
     end
 
     # Helper for dealing with association selects/radios, generating the
@@ -167,7 +169,9 @@ module SimpleForm
     #
     # From the options above, only :collection can also be supplied.
     #
-    def association(association, options={}, &block)
+    # Please note that the association helper is currently only tested with Active Record. Depending on the ORM you are using your mileage may vary.
+    #
+    def association(association, options = {}, &block)
       options = options.dup
 
       return simple_fields_for(*[association,
@@ -179,29 +183,9 @@ module SimpleForm
       raise "Association #{association.inspect} not found" unless reflection
 
       options[:as] ||= :select
-      options[:collection] ||= options.fetch(:collection) {
-        reflection.klass.all(reflection.options.slice(:conditions, :order))
-      }
+      options[:collection] ||= fetch_association_collection(reflection, options)
 
-      attribute = case reflection.macro
-        when :belongs_to
-          (reflection.respond_to?(:options) && reflection.options[:foreign_key]) || :"#{reflection.name}_id"
-        when :has_one
-          raise ArgumentError, ":has_one associations are not supported by f.association"
-        else
-          if options[:as] == :select
-            html_options = options[:input_html] ||= {}
-            html_options[:multiple] = true unless html_options.key?(:multiple)
-          end
-
-          # Force the association to be preloaded for performance.
-          if options[:preload] != false && object.respond_to?(association)
-            target = object.send(association)
-            target.to_a if target.respond_to?(:to_a)
-          end
-
-          :"#{reflection.name.to_s.singularize}_ids"
-      end
+      attribute = build_association_attribute(reflection, association, options)
 
       input(attribute, options.merge(reflection: reflection))
     end
@@ -236,7 +220,7 @@ module SimpleForm
     #    f.error :name
     #    f.error :name, id: "cool_error"
     #
-    def error(attribute_name, options={})
+    def error(attribute_name, options = {})
       options = options.dup
 
       options[:error_html] = options.except(:error_tag, :error_prefix, :error_method)
@@ -253,7 +237,7 @@ module SimpleForm
     #
     #    f.full_error :token #=> <span class="error">Token is invalid</span>
     #
-    def full_error(attribute_name, options={})
+    def full_error(attribute_name, options = {})
       options = options.dup
 
       options[:error_prefix] ||= if object.class.respond_to?(:human_attribute_name)
@@ -275,7 +259,7 @@ module SimpleForm
     #    f.hint :name, id: "cool_hint"
     #    f.hint "Don't forget to accept this"
     #
-    def hint(attribute_name, options={})
+    def hint(attribute_name, options = {})
       options = options.dup
 
       options[:hint_html] = options.except(:hint_tag, :hint)
@@ -326,7 +310,7 @@ module SimpleForm
     #    f.error_notification message: 'Something went wrong'
     #    f.error_notification id: 'user_error_message', class: 'form_error'
     #
-    def error_notification(options={})
+    def error_notification(options = {})
       SimpleForm::ErrorNotification.new(self, options).render
     end
 
@@ -443,10 +427,10 @@ module SimpleForm
     # route[blocks_attributes][0][blocks_learning_object_attributes][1][foo_attributes]
     # ["route", "blocks", "blocks_learning_object", "foo"]
     #
-    def lookup_model_names
+    def lookup_model_names #:nodoc:
       @lookup_model_names ||= begin
         child_index = options[:child_index]
-        names = object_name.to_s.scan(/([a-zA-Z_]+)/).flatten
+        names = object_name.to_s.scan(/(?!\d)\w+/).flatten
         names.delete(child_index) if child_index
         names.each { |name| name.gsub!('_attributes', '') }
         names.freeze
@@ -454,19 +438,60 @@ module SimpleForm
     end
 
     # The action to be used in lookup.
-    def lookup_action
+    def lookup_action #:nodoc:
       @lookup_action ||= begin
-        action = template.controller.action_name
+        action = template.controller && template.controller.action_name
         return unless action
-        action = action.to_sym
+        action = action.to_s
         ACTIONS[action] || action
       end
     end
 
     private
 
+    def fetch_association_collection(reflection, options)
+      options.fetch(:collection) do
+        relation = reflection.klass.all
+
+        if reflection.respond_to?(:scope) && reflection.scope
+          relation = reflection.klass.instance_exec(&reflection.scope)
+        else
+          order = reflection.options[:order]
+          conditions = reflection.options[:conditions]
+          conditions = object.instance_exec(&conditions) if conditions.respond_to?(:call)
+
+          relation = relation.where(conditions)
+          relation = relation.order(order) if relation.respond_to?(:order)
+        end
+
+        relation
+      end
+    end
+
+    def build_association_attribute(reflection, association, options)
+      case reflection.macro
+      when :belongs_to
+        (reflection.respond_to?(:options) && reflection.options[:foreign_key]) || :"#{reflection.name}_id"
+      when :has_one
+        raise ArgumentError, ":has_one associations are not supported by f.association"
+      else
+        if options[:as] == :select
+          html_options = options[:input_html] ||= {}
+          html_options[:multiple] = true unless html_options.key?(:multiple)
+        end
+
+        # Force the association to be preloaded for performance.
+        if options[:preload] != false && object.respond_to?(association)
+          target = object.send(association)
+          target.to_a if target.respond_to?(:to_a)
+        end
+
+        :"#{reflection.name.to_s.singularize}_ids"
+      end
+    end
+
     # Find an input based on the attribute name.
-    def find_input(attribute_name, options={}, &block) #:nodoc:
+    def find_input(attribute_name, options = {}, &block)
       column     = find_attribute_column(attribute_name)
       input_type = default_input_type(attribute_name, column, options)
 
@@ -480,7 +505,7 @@ module SimpleForm
     # Attempt to guess the better input type given the defined options. By
     # default alwayls fallback to the user :as option, or to a :select when a
     # collection is given.
-    def default_input_type(attribute_name, column, options) #:nodoc:
+    def default_input_type(attribute_name, column, options)
       return options[:as].to_sym if options[:as]
       return :select             if options[:collection]
       custom_type = find_custom_type(attribute_name.to_s) and return custom_type
@@ -505,24 +530,24 @@ module SimpleForm
       end
     end
 
-    def find_custom_type(attribute_name) #:nodoc:
+    def find_custom_type(attribute_name)
       SimpleForm.input_mappings.find { |match, type|
         attribute_name =~ match
       }.try(:last) if SimpleForm.input_mappings
     end
 
-    def file_method?(attribute_name) #:nodoc:
+    def file_method?(attribute_name)
       file = @object.send(attribute_name) if @object.respond_to?(attribute_name)
       file && SimpleForm.file_methods.any? { |m| file.respond_to?(m) }
     end
 
-    def find_attribute_column(attribute_name) #:nodoc:
+    def find_attribute_column(attribute_name)
       if @object.respond_to?(:column_for_attribute)
         @object.column_for_attribute(attribute_name)
       end
     end
 
-    def find_association_reflection(association) #:nodoc:
+    def find_association_reflection(association)
       if @object.class.respond_to?(:reflect_on_association)
         @object.class.reflect_on_association(association)
       end
@@ -535,7 +560,7 @@ module SimpleForm
     #    b) Or use the found mapping
     # 2) If not, fallbacks to #{input_type}Input
     # 3) If not, fallbacks to SimpleForm::Inputs::#{input_type}Input
-    def find_mapping(input_type) #:nodoc:
+    def find_mapping(input_type)
       discovery_cache[input_type] ||=
         if mapping = self.class.mappings[input_type]
           mapping_override(mapping) || mapping
@@ -546,13 +571,29 @@ module SimpleForm
         end
     end
 
-    def find_wrapper_mapping(input_type) #:nodoc:
-      SimpleForm.wrapper_mappings && SimpleForm.wrapper_mappings[input_type]
+    # Attempts to find a wrapper mapping. It follows the following rules:
+    #
+    # 1) It tries to find a wrapper for the current form
+    # 2) If not, it tries to find a config
+    def find_wrapper_mapping(input_type)
+      if options[:wrapper_mappings] && options[:wrapper_mappings][input_type]
+        options[:wrapper_mappings][input_type]
+      else
+        SimpleForm.wrapper_mappings && SimpleForm.wrapper_mappings[input_type]
+      end
+    end
+
+    def find_wrapper(input_type, options)
+      if name = options[:wrapper] || find_wrapper_mapping(input_type)
+        name.respond_to?(:render) ? name : SimpleForm.wrapper(name)
+      else
+        wrapper
+      end
     end
 
     # If cache_discovery is enabled, use the class level cache that persists
     # between requests, otherwise use the instance one.
-    def discovery_cache #:nodoc:
+    def discovery_cache
       if SimpleForm.cache_discovery
         self.class.discovery_cache
       else
@@ -560,14 +601,14 @@ module SimpleForm
       end
     end
 
-    def mapping_override(klass) #:nodoc:
+    def mapping_override(klass)
       name = klass.name
       if name =~ /^SimpleForm::Inputs/
         attempt_mapping name.split("::").last, Object
       end
     end
 
-    def attempt_mapping(mapping, at) #:nodoc:
+    def attempt_mapping(mapping, at)
       return if SimpleForm.inputs_discovery == false && at == Object
 
       begin

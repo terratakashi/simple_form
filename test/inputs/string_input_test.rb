@@ -104,6 +104,26 @@ class StringInputTest < ActionView::TestCase
     end
   end
 
+  test 'input should use custom i18n scope to translate placeholder text' do
+    store_translations(:en, my_scope: { placeholders: { user: {
+      name: 'Name goes here'
+    } } }) do
+      swap SimpleForm, i18n_scope: :my_scope do
+        with_input_for @user, :name, :string
+        assert_select 'input.string[placeholder=Name goes here]'
+      end
+    end
+  end
+
+  test 'input should translate a key prefixed with _html and return the html markup' do
+    store_translations(:en, simple_form: { labels: { user: {
+      name_html: '<b>Name</b>'
+    } } }) do
+      with_input_for @user, :name, :string
+      assert_select 'label b', 'Name'
+    end
+  end
+
   [:email, :url, :search, :tel].each do |type|
     test "input should allow type #{type}" do
       with_input_for @user, :name, type

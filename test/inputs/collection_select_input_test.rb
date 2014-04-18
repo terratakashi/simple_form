@@ -31,7 +31,7 @@ class CollectionSelectInputTest < ActionView::TestCase
   test 'input should do automatic collection translation for select types using defaults key' do
     store_translations(:en, simple_form: { options: { defaults: {
       gender: { male: 'Male', female: 'Female'}
-    } } } ) do
+    } } }) do
       with_input_for @user, :gender, :select, collection: [:male, :female]
       assert_select 'select.select#user_gender'
       assert_select 'select option', 'Male'
@@ -42,7 +42,7 @@ class CollectionSelectInputTest < ActionView::TestCase
   test 'input should do automatic collection translation for select types using specific object key' do
     store_translations(:en, simple_form: { options: { user: {
       gender: { male: 'Male', female: 'Female'}
-    } } } ) do
+    } } }) do
       with_input_for @user, :gender, :select, collection: [:male, :female]
       assert_select 'select.select#user_gender'
       assert_select 'select option', 'Male'
@@ -54,6 +54,12 @@ class CollectionSelectInputTest < ActionView::TestCase
     @user.name = "Carlos"
     with_input_for @user, :name, :select, collection: ['Jose', 'Carlos']
     assert_select 'select option[selected=selected]', 'Carlos'
+  end
+
+  test 'input should accept html options as the last element of collection' do
+    with_input_for @user, :name, :select, collection: [['Jose', class: 'foo']]
+    assert_select 'select.select#user_name'
+    assert_select 'select option.foo', 'Jose'
   end
 
   test 'input should mark the selected value also when using integers' do
@@ -96,9 +102,63 @@ class CollectionSelectInputTest < ActionView::TestCase
     assert_select 'select option[value=]', ''
   end
 
+  test 'input should translate include blank when set to :translate' do
+    store_translations(:en, simple_form: { include_blanks: { user: {
+      age: 'Rather not say'
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, include_blank: :translate
+      assert_select 'select option[value=]', 'Rather not say'
+    end
+  end
+
+  test 'input should translate include blank with a default' do
+    store_translations(:en, simple_form: { include_blanks: { defaults: {
+      age: 'Rather not say',
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, include_blank: :translate
+      assert_select 'select option[value=]', 'Rather not say'
+    end
+  end
+
+  test 'input should not translate include blank when set to a string' do
+    store_translations(:en, simple_form: { include_blanks: { user: {
+      age: 'Rather not say'
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, include_blank: 'Young at heart'
+      assert_select 'select option[value=]', 'Young at heart'
+    end
+  end
+
+  test 'input should not translate include blank when automatically set' do
+    store_translations(:en, simple_form: { include_blanks: { user: {
+      age: 'Rather not say'
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30
+      assert_select 'select option[value=]', ''
+    end
+  end
+
+  test 'input should not translate include blank when set to true' do
+    store_translations(:en, simple_form: { include_blanks: { user: {
+      age: 'Rather not say'
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, include_blank: true
+      assert_select 'select option[value=]', ''
+    end
+  end
+
+  test 'input should not translate include blank when set to false' do
+    store_translations(:en, simple_form: { include_blanks: { user: {
+      age: 'Rather not say'
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, include_blank: false
+      assert_no_select 'select option[value=]'
+    end
+  end
+
   test 'input should not set include blank if otherwise is told' do
     with_input_for @user, :age, :select, collection: 18..30, include_blank: false
-    assert_no_select 'select option[value=]', ''
+    assert_no_select 'select option[value=]'
   end
 
   test 'input should not set include blank if prompt is given' do
@@ -111,8 +171,53 @@ class CollectionSelectInputTest < ActionView::TestCase
     assert_no_select 'select option[value=]', ''
   end
 
+  test 'input should translate prompt when set to :translate' do
+    store_translations(:en, simple_form: { prompts: { user: {
+      age: 'Select age:'
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, prompt: :translate
+      assert_select 'select option[value=]', 'Select age:'
+    end
+  end
+
+  test 'input should translate prompt with a default' do
+    store_translations(:en, simple_form: { prompts: { defaults: {
+      age: 'Select age:',
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, prompt: :translate
+      assert_select 'select option[value=]', 'Select age:'
+    end
+  end
+
+  test 'input should not translate prompt when set to a string' do
+    store_translations(:en, simple_form: { prompts: { user: {
+      age: 'Select age:'
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, prompt: 'Do it:'
+      assert_select 'select option[value=]', 'Do it:'
+    end
+  end
+
+  test 'input should not translate prompt when set to false' do
+    store_translations(:en, simple_form: { prompts: { user: {
+      age: 'Select age:'
+    } } }) do
+      with_input_for @user, :age, :select, collection: 18..30, prompt: false
+      assert_no_select 'select option[value=]'
+    end
+  end
+
+  test 'input should use Rails prompt translation as a fallback' do
+    store_translations(:en, helpers: { select: {
+      prompt: 'Select value:'
+    } }) do
+      with_input_for @user, :age, :select, collection: 18..30, prompt: :translate
+      assert_select 'select option[value=]', "Select value:"
+    end
+  end
+
   test 'input should detect label and value on collections' do
-    users = [ setup_new_user(id: 1, name: "Jose"), setup_new_user(id: 2, name: "Carlos") ]
+    users = [User.build(id: 1, name: "Jose"), User.build(id: 2, name: "Carlos")]
     with_input_for @user, :description, :select, collection: users
     assert_select 'select option[value=1]', 'Jose'
     assert_select 'select option[value=2]', 'Carlos'
@@ -136,7 +241,7 @@ class CollectionSelectInputTest < ActionView::TestCase
 
   test 'input should allow overriding label and value method using a lambda for collection selects' do
     with_input_for @user, :name, :select,
-                          collection: ['Jose' , 'Carlos'],
+                          collection: ['Jose', 'Carlos'],
                           label_method: lambda { |i| i.upcase },
                           value_method: lambda { |i| i.downcase }
     assert_select 'select option[value=jose]', "JOSE"
@@ -145,7 +250,7 @@ class CollectionSelectInputTest < ActionView::TestCase
 
   test 'input should allow overriding only label but not value method using a lambda for collection select' do
     with_input_for @user, :name, :select,
-                          collection: ['Jose' , 'Carlos'],
+                          collection: ['Jose', 'Carlos'],
                           label_method: lambda { |i| i.upcase }
     assert_select 'select option[value=Jose]', "JOSE"
     assert_select 'select option[value=Carlos]', "CARLOS"
@@ -153,7 +258,7 @@ class CollectionSelectInputTest < ActionView::TestCase
 
   test 'input should allow overriding only value but not label method using a lambda for collection select' do
     with_input_for @user, :name, :select,
-                          collection: ['Jose' , 'Carlos'],
+                          collection: ['Jose', 'Carlos'],
                           value_method: lambda { |i| i.downcase }
     assert_select 'select option[value=jose]', "Jose"
     assert_select 'select option[value=carlos]', "Carlos"
@@ -167,27 +272,58 @@ class CollectionSelectInputTest < ActionView::TestCase
   end
 
   test 'collection input with select type should generate required html attribute only with blank option' do
-    with_input_for @user, :name, :select, include_blank: true, collection: ['Jose' , 'Carlos']
+    with_input_for @user, :name, :select, include_blank: true, collection: ['Jose', 'Carlos']
+    assert_select 'select.required'
+    assert_select 'select[required]'
+  end
+
+  test 'collection input with select type should generate required html attribute only with blank option or prompt' do
+    with_input_for @user, :name, :select, prompt: 'Name...', collection: ['Jose', 'Carlos']
     assert_select 'select.required'
     assert_select 'select[required]'
   end
 
   test 'collection input with select type should not generate required html attribute without blank option' do
-    with_input_for @user, :name, :select, include_blank: false, collection: ['Jose' , 'Carlos']
+    with_input_for @user, :name, :select, include_blank: false, collection: ['Jose', 'Carlos']
     assert_select 'select.required'
     assert_no_select 'select[required]'
+    assert_no_select 'select[aria-required=true]'
   end
 
   test 'collection input with select type with multiple attribute should generate required html attribute without blank option' do
-    with_input_for @user, :name, :select, include_blank: false, input_html: {multiple: true}, collection: ['Jose' , 'Carlos']
+    with_input_for @user, :name, :select, include_blank: false, input_html: { multiple: true }, collection: ['Jose', 'Carlos']
     assert_select 'select.required'
     assert_select 'select[required]'
   end
 
   test 'collection input with select type with multiple attribute should generate required html attribute with blank option' do
-    with_input_for @user, :name, :select, include_blank: true, input_html: {multiple: true}, collection: ['Jose' , 'Carlos']
+    with_input_for @user, :name, :select, include_blank: true, input_html: { multiple: true }, collection: ['Jose', 'Carlos']
     assert_select 'select.required'
     assert_select 'select[required]'
+  end
+
+  test 'with a blank option, a collection input of type select has an aria-required html attribute' do
+    with_input_for @user, :name, :select, include_blank: true, collection: ['Jose', 'Carlos']
+    assert_select 'select.required'
+    assert_select 'select[aria-required=true]'
+  end
+
+  test 'without a blank option, a collection input of type select does not have an aria-required html attribute' do
+    with_input_for @user, :name, :select, include_blank: false, collection: ['Jose', 'Carlos']
+    assert_select 'select.required'
+    assert_no_select 'select[aria-required]'
+  end
+
+  test 'without a blank option and with a multiple option, a collection input of type select has an aria-required html attribute' do
+    with_input_for @user, :name, :select, include_blank: false, input_html: { multiple: true }, collection: ['Jose', 'Carlos']
+    assert_select 'select.required'
+    assert_select 'select[aria-required=true]'
+  end
+
+  test 'with a blank option and a multiple option, a collection input of type select has an aria-required html attribute' do
+    with_input_for @user, :name, :select, include_blank: true, input_html: { multiple: true }, collection: ['Jose', 'Carlos']
+    assert_select 'select.required'
+    assert_select 'select[aria-required]'
   end
 
   test 'input should allow disabled options with a lambda for collection select' do

@@ -43,8 +43,14 @@ class HintTest < ActionView::TestCase
   end
 
   test 'hint should be output as html_safe' do
-    with_hint_for @user, :name, hint: '<b>Bold</b> and not...'
+    with_hint_for @user, :name, hint: '<b>Bold</b> and not...'.html_safe
     assert_select 'span.hint', 'Bold and not...'
+    assert_select 'span.hint b', 'Bold'
+  end
+
+  test 'builder should escape hint text' do
+    with_hint_for @user, :name, hint: '<script>alert(1337)</script>'
+    assert_select 'span.hint', "&lt;script&gt;alert(1337)&lt;/script&gt;"
   end
 
   # Without attribute name
@@ -94,7 +100,7 @@ class HintTest < ActionView::TestCase
 
   test 'hint should use i18n under defaults namespace to lookup translation' do
     store_translations(:en, simple_form: {
-      hints: {defaults: {name: 'Content of this input will be downcased...' } }
+      hints: { defaults: { name: 'Content of this input will be downcased...' } }
     }) do
       with_hint_for @user, :name
       assert_select 'span.hint', 'Content of this input will be downcased...'
@@ -132,7 +138,7 @@ class HintTest < ActionView::TestCase
   test 'hint with custom wrappers works' do
     swap_wrapper do
       with_hint_for @user, :name, hint: "can't be blank"
-      assert_select 'div.omg_hint', "can't be blank"
+      assert_select 'div.omg_hint', "can&#39;t be blank"
     end
   end
 end

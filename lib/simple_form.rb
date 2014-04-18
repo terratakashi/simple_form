@@ -24,6 +24,24 @@ module SimpleForm
     SimpleForm::Components.eager_load!
   end
 
+  CUSTOM_INPUT_DEPRECATION_WARN = <<-WARN
+%{name} method now accepts a `wrapper_options` argument. The method definition without the argument is deprecated and will be removed in the next Simple Form version. Change your code from:
+
+    def %{name}
+
+to
+
+    def %{name}(wrapper_options)
+
+See https://github.com/plataformatec/simple_form/pull/997 for more information.
+  WARN
+
+  @@configured = false
+
+  def self.configured? #:nodoc:
+    @@configured
+  end
+
   ## CONFIGURATION OPTIONS
 
   # Method used to tidy up errors.
@@ -66,7 +84,7 @@ module SimpleForm
 
   # How the label text should be generated altogether with the required text.
   mattr_accessor :label_text
-  @@label_text = lambda { |label, required| "#{required} #{label}" }
+  @@label_text = lambda { |label, required, explicit_label| "#{required} #{label}" }
 
   # You can define the class to be used on all labels. Defaults to none.
   mattr_accessor :label_class
@@ -107,6 +125,8 @@ module SimpleForm
   # Custom wrappers for input types. This should be a hash containing an input
   # type as key and the wrapper that will be used for all inputs with specified type.
   # e.g { string: :string_wrapper, boolean: :boolean_wrapper }
+  # You can also set a wrapper mapping per form basis.
+  # e.g simple_form_for(@foo, wrapper_mappings: { check_boxes: :bootstrap_checkbox })
   mattr_accessor :wrapper_mappings
   @@wrapper_mappings = nil
 
@@ -139,15 +159,38 @@ module SimpleForm
   mattr_accessor :button_class
   @@button_class = 'button'
 
+  # Override the default ActiveModelHelper behaviour of wrapping the input.
+  # This gets taken care of semantically by adding an error class to the wrapper tag
+  # containing the input.
+  mattr_accessor :field_error_proc
+  @@field_error_proc = proc do |html_tag, instance_tag|
+    html_tag
+  end
+
+  # Adds a class to each generated inputs
+  mattr_accessor :input_class
+  @@input_class = nil
+
+  # Defines if an input wrapper class should be included or not
+  mattr_accessor :include_default_input_wrapper_class
+  @@include_default_input_wrapper_class = true
+
+  # Define the default class of the input wrapper of the boolean input.
+  mattr_accessor :boolean_label_class
+  @@boolean_label_class = 'checkbox'
+
   ## WRAPPER CONFIGURATION
   # The default wrapper to be used by the FormBuilder.
   mattr_accessor :default_wrapper
   @@default_wrapper = :default
-  @@wrappers = {}
+  @@wrappers = {} #:nodoc:
+
+  mattr_accessor :i18n_scope
+  @@i18n_scope = 'simple_form'
 
   # Retrieves a given wrapper
   def self.wrapper(name)
-    @@wrappers[name.to_sym] or raise WrapperNotFound, "Couldn't find wrapper with name #{name}"
+    @@wrappers[name.to_s] or raise WrapperNotFound, "Couldn't find wrapper with name #{name}"
   end
 
   # Raised when fails to find a given wrapper name
@@ -160,14 +203,14 @@ module SimpleForm
     if block_given?
       options                 = args.extract_options!
       name                    = args.first || :default
-      @@wrappers[name.to_sym] = build(options, &block)
+      @@wrappers[name.to_s]   = build(options, &block)
     else
       @@wrappers
     end
   end
 
   # Builds a new wrapper using SimpleForm::Wrappers::Builder.
-  def self.build(options={})
+  def self.build(options = {})
     options[:tag] = :div if options[:tag].nil?
     builder = SimpleForm::Wrappers::Builder.new(options)
     yield builder
@@ -198,9 +241,10 @@ module SimpleForm
     ActiveSupport::Deprecation.warn "[SIMPLE_FORM] SimpleForm.default_input_size= is deprecated and has no effect", caller
   end
 
-  # Default way to setup SimpleForm. Run rails generate simple_form:install
+  # Default way to setup Simple Form. Run rails generate simple_form:install
   # to create a fresh initializer with all configuration values.
   def self.setup
+    @@configured = true
     yield self
   end
 end

@@ -105,6 +105,22 @@ class AssociationTest < ActionView::TestCase
     assert_select 'form input.radio_buttons#user_company_id_3'
   end
 
+  test 'builder allows collection to have a proc as a condition' do
+    with_association_for @user, :extra_special_company
+    assert_select 'form select.select#user_extra_special_company_id'
+    assert_select 'form select option[value=1]'
+    assert_no_select 'form select option[value=2]'
+    assert_no_select 'form select option[value=3]'
+  end
+
+  test 'builder allows collection to have a scope' do
+    with_association_for @user, :special_pictures
+    assert_select 'form select.select#user_special_picture_ids'
+    assert_select 'form select option[value=3]', '3'
+    assert_no_select 'form select option[value=1]'
+    assert_no_select 'form select option[value=2]'
+  end
+
   test 'builder marks the record which already belongs to the user' do
     @user.company_id = 2
     with_association_for @user, :company, as: :radio_buttons
@@ -136,6 +152,15 @@ class AssociationTest < ActionView::TestCase
     assert_raise ArgumentError do
       with_association_for @user, :first_company, as: :radio_buttons
     end
+  end
+
+  test 'builder does not call order if the given association does not respond to it' do
+    with_association_for @user, :pictures
+    assert_select 'form select.select#user_picture_ids'
+    assert_select 'form select[multiple=multiple]'
+    assert_select 'form select option[value=1]', 'Picture 1'
+    assert_select 'form select option[value=2]', 'Picture 2'
+    assert_select 'form select option[value=3]', 'Picture 3'
   end
 
   test 'builder creates a select with multiple options for collection associations' do
